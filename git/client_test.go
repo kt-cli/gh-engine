@@ -2417,3 +2417,14 @@ func TestClientWorktreePrune(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "path/to/git worktree prune", strings.Join(cmd.Args[3:], " "))
 }
+
+func TestClientUseConfiguredCredentialHelpers(t *testing.T) {
+	c := &Client{GhPath: "credential-free-engine", GitPath: "path/to/git", UseConfiguredCredentialHelpers: true}
+	for _, client := range []*Client{c, c.Copy()} {
+		cmd, err := client.AuthenticatedCommand(context.Background(), CredentialPatternFromHost("github.com"), "fetch", "origin")
+		require.NoError(t, err)
+		require.Equal(t, []string{"path/to/git", "fetch", "origin"}, cmd.Args)
+		_, err = client.AuthenticatedCommand(context.Background(), disallowedCredentialPattern, "fetch")
+		require.Error(t, err)
+	}
+}

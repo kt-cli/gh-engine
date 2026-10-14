@@ -13,6 +13,8 @@ KT 内核基线固定官方 `v2.102.0`，保留全部上游历史，消费方以
 默认仓库接缝增加 `pkg/cmdutil/factory.go` Factory.DefaultRepository 与
 `pkg/cmd/root/root.go` 的可选注入；未设置时仍使用上游 git 仓库解析。
 它允许消费方提供默认仓库，显式命令位置参数仍按官方语义覆盖默认值。
+`git/client.go` 增加可选 UseConfiguredCredentialHelpers，凭据无输出内核使用现有
+本机 Git helper；普通上游调用未设置时仍保持官方注入行为，Copy 保留该选项。
 不修改命令业务、REST/GraphQL 实现、文件语义或签名验证。此 Fork 无凭据、无授权规则、无生产部署；由 kt-gh 链接，发布走中央组件工作流。
 
 验证：配置不读环境/文件/keyring、不返回 token；所有三类 HTTP factory 注入；上游命令树生成能力目录；官方真实命令的文件/输出行为及 Broker 边界；`go fix`、全包测试、lint、kt-gh 接缝测试。升级逐项复查新命令与网络客户端，能力增加不自动授予机器权限。

@@ -28,6 +28,7 @@ func New(ios *iostreams.IOStreams, client *http.Client, external *http.Client, e
 	cfg := config.NewTransportConfig()
 	t := &telemetry.NoOpService{}
 	f := factory.New(Version, "kt-gh", func() (gh.Config, error) { return cfg, nil }, ios, executable, t)
+	f.GitClient.UseConfiguredCredentialHelpers = true
 	f.APITransport = client.Transport
 	f.HttpClient = func() (*http.Client, error) { return client, nil }
 	f.PlainHttpClient = f.HttpClient

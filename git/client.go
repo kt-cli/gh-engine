@@ -51,12 +51,14 @@ type errWithExitCode interface {
 }
 
 type Client struct {
-	GhPath  string
-	RepoDir string
-	GitPath string
-	Stderr  io.Writer
-	Stdin   io.Reader
-	Stdout  io.Writer
+	// UseConfiguredCredentialHelpers keeps native Git's configured authentication.
+	UseConfiguredCredentialHelpers bool
+	GhPath                         string
+	RepoDir                        string
+	GitPath                        string
+	Stderr                         io.Writer
+	Stdin                          io.Reader
+	Stdout                         io.Writer
 
 	commandContext commandCtx
 	mu             sync.Mutex
@@ -64,12 +66,13 @@ type Client struct {
 
 func (c *Client) Copy() *Client {
 	return &Client{
-		GhPath:  c.GhPath,
-		RepoDir: c.RepoDir,
-		GitPath: c.GitPath,
-		Stderr:  c.Stderr,
-		Stdin:   c.Stdin,
-		Stdout:  c.Stdout,
+		UseConfiguredCredentialHelpers: c.UseConfiguredCredentialHelpers,
+		GhPath:                         c.GhPath,
+		RepoDir:                        c.RepoDir,
+		GitPath:                        c.GitPath,
+		Stderr:                         c.Stderr,
+		Stdin:                          c.Stdin,
+		Stdout:                         c.Stdout,
 
 		commandContext: c.commandContext,
 	}
@@ -141,6 +144,12 @@ func CredentialPatternFromHost(host string) CredentialPattern {
 // AuthenticatedCommand is a wrapper around Command that included configuration to use gh
 // as the credential helper for git.
 func (c *Client) AuthenticatedCommand(ctx context.Context, credentialPattern CredentialPattern, args ...string) (*Command, error) {
+	if c.UseConfiguredCredentialHelpers {
+		if credentialPattern == disallowedCredentialPattern {
+			return nil, fmt.Errorf("empty credential pattern is not allowed unless provided explicitly")
+		}
+		return c.Command(ctx, args...)
+	}
 	if c.GhPath == "" {
 		// Assumes that gh is in PATH.
 		c.GhPath = "gh"
