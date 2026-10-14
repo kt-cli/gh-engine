@@ -67,12 +67,15 @@ type ApiOptions struct {
 
 func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command {
 	opts := ApiOptions{
-		AppVersion:        f.AppVersion,
-		InvokingAgent:     f.InvokingAgent,
-		BaseRepo:          f.BaseRepo,
-		Branch:            f.Branch,
-		Config:            f.Config,
-		HttpClient:        api.NewHTTPClient,
+		AppVersion:    f.AppVersion,
+		InvokingAgent: f.InvokingAgent,
+		BaseRepo:      f.BaseRepo,
+		Branch:        f.Branch,
+		Config:        f.Config,
+		HttpClient: func(opts api.HTTPClientOptions) (*http.Client, error) {
+			opts.Transport = f.APITransport
+			return api.NewHTTPClient(opts)
+		},
 		IO:                f.IOStreams,
 		TelemetryDisabler: f.TelemetryDisabler,
 	}

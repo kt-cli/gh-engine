@@ -20,6 +20,8 @@ type config interface {
 }
 
 type HTTPClientOptions struct {
+	// Transport overrides network delivery while retaining headers and logging.
+	Transport          http.RoundTripper
 	AppVersion         string
 	InvokingAgent      string
 	CacheTTL           time.Duration
@@ -40,6 +42,7 @@ func NewHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 		AuthToken:          "none",
 		LogIgnoreEnv:       true,
 		SkipDefaultHeaders: opts.SkipDefaultHeaders,
+		Transport:          opts.Transport,
 	}
 
 	debugEnabled, debugValue := utils.IsDebugEnabled()

@@ -15,6 +15,8 @@ import (
 )
 
 type Factory struct {
+	// APITransport supplies network delivery for api, whose options retain its per-command logging and cache behavior.
+	APITransport   http.RoundTripper
 	AppVersion     string
 	ExecutablePath string
 	InvokingAgent  string
