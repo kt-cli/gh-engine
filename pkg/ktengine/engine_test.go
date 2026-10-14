@@ -43,3 +43,17 @@ func TestOfficialCommandUsesInjectedHTTPWithoutToken(t *testing.T) {
 	require.True(t, called)
 	require.Contains(t, out.String(), "verifiable_password_authentication")
 }
+
+func TestDefaultRepositoryAllowsOfficialViewOutsideGit(t *testing.T) {
+	t.Chdir(t.TempDir())
+	ios, _, out, _ := iostreams.Test()
+	c := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		require.Equal(t, "api.github.com", r.URL.Host)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":{"repository":{"name":"widgets","owner":{"login":"acme"},"nameWithOwner":"acme/widgets"}}}`)), Request: r}, nil
+	})}
+	cmd, err := New(ios, c, c, "", "acme/widgets")
+	require.NoError(t, err)
+	cmd.SetArgs([]string{"repo", "view", "--json", "nameWithOwner"})
+	require.NoError(t, cmd.Execute())
+	require.Contains(t, out.String(), "acme/widgets")
+}

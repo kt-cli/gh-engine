@@ -29,7 +29,9 @@ type Factory struct {
 	TelemetryDisabler ghtelemetry.Disabler
 
 	BaseRepo func() (ghrepo.Interface, error)
-	Branch   func() (string, error)
+	// DefaultRepository supplies an explicit embedding context for commands that otherwise resolve git remotes.
+	DefaultRepository func() (ghrepo.Interface, error)
+	Branch            func() (string, error)
 	// It would be nice if Config were just loaded once at startup and an error
 	// were returned, but this would prevent commands like "gh version" from running.
 	// So for now, we eagerly load the config and don't fail if there is an error,

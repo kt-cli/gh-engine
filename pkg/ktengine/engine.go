@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/gh"
+	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/telemetry"
 	"github.com/cli/cli/v2/pkg/cmd/factory"
 	"github.com/cli/cli/v2/pkg/cmd/root"
@@ -20,7 +21,7 @@ const Version = "2.102.0"
 // New constructs upstream commands using the provided streams and transport.
 // The caller must reject or remove commands that export credentials or load
 // arbitrary executables before executing the returned command tree.
-func New(ios *iostreams.IOStreams, client *http.Client, external *http.Client, executable string) (*cobra.Command, error) {
+func New(ios *iostreams.IOStreams, client *http.Client, external *http.Client, executable string, defaultRepository ...string) (*cobra.Command, error) {
 	if client == nil || client.Transport == nil || external == nil || external.Transport == nil {
 		return nil, fmt.Errorf("explicit HTTP transports are required")
 	}
@@ -31,6 +32,17 @@ func New(ios *iostreams.IOStreams, client *http.Client, external *http.Client, e
 	f.HttpClient = func() (*http.Client, error) { return client, nil }
 	f.PlainHttpClient = f.HttpClient
 	f.ExternalHttpClient = func() (*http.Client, error) { return external, nil }
+	if len(defaultRepository) > 1 {
+		return nil, fmt.Errorf("one default repository is supported")
+	}
+	if len(defaultRepository) == 1 && defaultRepository[0] != "" {
+		repo, err := ghrepo.FromFullName(defaultRepository[0])
+		if err != nil {
+			return nil, err
+		}
+		f.BaseRepo = func() (ghrepo.Interface, error) { return repo, nil }
+		f.DefaultRepository = f.BaseRepo
+	}
 	// Extensions are not loaded from the operator's filesystem at construction.
 	f.ExtensionManager = noExtensions{}
 	cmd, err := root.NewCmdRoot(f, t, Version, "")
