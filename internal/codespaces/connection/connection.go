@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/cli/cli/v2/internal/codespaces/api"
+	"github.com/cli/cli/v2/internal/codespaces/transport"
 	"github.com/microsoft/dev-tunnels/go/tunnels"
 )
 
@@ -24,6 +25,8 @@ type TunnelClient struct {
 }
 
 type CodespaceConnection struct {
+	// Managed supplies an optional externally managed port forwarder.
+	Managed                    transport.PortForwarder
 	tunnelProperties           api.TunnelProperties
 	TunnelManager              *tunnels.Manager
 	TunnelClient               *TunnelClient
@@ -40,6 +43,11 @@ type CodespaceConnection struct {
 // This connections allows for port forwarding which enables the
 // use of most features of the codespace command.
 func NewCodespaceConnection(ctx context.Context, codespace *api.Codespace, httpClient *http.Client) (connection *CodespaceConnection, err error) {
+	return NewCodespaceConnectionWithRelayValidator(ctx, codespace, httpClient, nil)
+}
+
+// NewCodespaceConnectionWithRelayValidator validates relay destinations before initializing the tunnel client.
+func NewCodespaceConnectionWithRelayValidator(ctx context.Context, codespace *api.Codespace, httpClient *http.Client, validate func(string) error) (connection *CodespaceConnection, err error) {
 	// Get the tunnel properties
 	tunnelProperties := codespace.Connection.TunnelProperties
 
@@ -70,7 +78,7 @@ func NewCodespaceConnection(ctx context.Context, codespace *api.Codespace, httpC
 	}
 
 	// Create the tunnel client (not connected yet)
-	tunnelClient, err := getTunnelClient(ctx, tunnelManager, tunnel, options)
+	tunnelClient, err := getTunnelClient(ctx, tunnelManager, tunnel, options, validate)
 	if err != nil {
 		return nil, fmt.Errorf("error getting tunnel client: %w", err)
 	}
@@ -109,6 +117,9 @@ func (c *CodespaceConnection) Connect(ctx context.Context) error {
 
 // Close closes the underlying tunnel client SSH connection.
 func (c *CodespaceConnection) Close() error {
+	if c.Managed != nil {
+		return c.Managed.Close()
+	}
 	// Lock the mutex to prevent race conditions with the underlying SSH connection
 	c.TunnelClient.mu.Lock()
 	defer c.TunnelClient.mu.Unlock()
@@ -149,11 +160,19 @@ func getTunnelManager(tunnelProperties api.TunnelProperties, httpClient *http.Cl
 // getTunnelClient creates a tunnel client for the given tunnel.
 // The tunnel client is used to connect to the tunnel and allows
 // for ports to be forwarded locally.
-func getTunnelClient(ctx context.Context, tunnelManager *tunnels.Manager, tunnel *tunnels.Tunnel, options *tunnels.TunnelRequestOptions) (tunnelClient *TunnelClient, err error) {
+func getTunnelClient(ctx context.Context, tunnelManager *tunnels.Manager, tunnel *tunnels.Tunnel, options *tunnels.TunnelRequestOptions, validators ...func(string) error) (tunnelClient *TunnelClient, err error) {
 	// Get the tunnel that we want to connect to
 	codespaceTunnel, err := tunnelManager.GetTunnel(ctx, tunnel, options)
 	if err != nil {
 		return nil, fmt.Errorf("error getting tunnel: %w", err)
+	}
+
+	if len(validators) > 0 && validators[0] != nil {
+		for _, endpoint := range codespaceTunnel.Endpoints {
+			if err := validators[0](endpoint.ClientRelayURI); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// Copy the access tokens from the tunnel definition

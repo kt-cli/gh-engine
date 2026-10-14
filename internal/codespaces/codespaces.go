@@ -11,6 +11,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cli/cli/v2/internal/codespaces/api"
 	"github.com/cli/cli/v2/internal/codespaces/connection"
+	"github.com/cli/cli/v2/internal/codespaces/transport"
 )
 
 // codespaceStatePollingBackoff is the delay between state polls while waiting for codespaces to become
@@ -58,7 +59,21 @@ func (e *TimeoutError) Error() string {
 // GetCodespaceConnection waits until a codespace is able
 // to be connected to and initializes a connection to it.
 func GetCodespaceConnection(ctx context.Context, progress progressIndicator, apiClient apiClient, codespace *api.Codespace) (*connection.CodespaceConnection, error) {
-	codespace, err := waitUntilCodespaceConnectionReady(ctx, progress, apiClient, codespace)
+	external, err := apiClient.ExternalHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+	if connector, ok := external.Transport.(transport.Connector); ok {
+		managed, err := connector.ConnectCodespace(ctx, codespace.Name)
+		if err != nil {
+			return nil, err
+		}
+		if managed == nil {
+			return nil, fmt.Errorf("managed codespace connection is nil")
+		}
+		return &connection.CodespaceConnection{Managed: managed}, nil
+	}
+	codespace, err = waitUntilCodespaceConnectionReady(ctx, progress, apiClient, codespace)
 	if err != nil {
 		return nil, err
 	}
