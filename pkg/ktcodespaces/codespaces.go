@@ -12,6 +12,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // PortForwarder is the command core's port forwarding interface.
@@ -36,16 +37,37 @@ func Open(ctx context.Context, name string, client *http.Client, authorize func(
 func open(ctx context.Context, name string, client *http.Client, authorize func(Codespace) error, validateURL func(string, string) error) (PortForwarder, error) {
 	f := &cmdutil.Factory{Config: func() (gh.Config, error) { return nil, fmt.Errorf("use default GitHub host") }, HttpClient: func() (*http.Client, error) { return client, nil }, ExternalHttpClient: func() (*http.Client, error) { return client, nil }}
 	a := api.New(f)
-	cs, err := a.GetCodespace(ctx, name, true)
-	if err != nil {
-		return nil, err
+	var cs *api.Codespace
+	readyCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	started := false
+	for {
+		var err error
+		cs, err = a.GetCodespace(readyCtx, name, true)
+		if err != nil {
+			return nil, err
+		}
+		if err = authorize(Codespace{Name: cs.Name, Account: cs.Owner.Login, Owner: cs.Repository.Owner.Login, Repository: strings.TrimPrefix(cs.Repository.FullName, cs.Repository.Owner.Login+"/"), State: cs.State}); err != nil {
+			return nil, err
+		}
+		if cs.State == api.CodespaceStateAvailable && cs.Connection.TunnelProperties.ServiceUri != "" {
+			break
+		}
+		if cs.State == api.CodespaceStateShutdown && !started {
+			if err = a.StartCodespace(readyCtx, name); err != nil {
+				return nil, err
+			}
+			started = true
+		}
+		timer := time.NewTimer(2 * time.Second)
+		select {
+		case <-readyCtx.Done():
+			timer.Stop()
+			return nil, readyCtx.Err()
+		case <-timer.C:
+		}
 	}
-	if err = authorize(Codespace{Name: cs.Name, Account: cs.Owner.Login, Owner: cs.Repository.Owner.Login, Repository: strings.TrimPrefix(cs.Repository.FullName, cs.Repository.Owner.Login+"/"), State: cs.State}); err != nil {
-		return nil, err
-	}
-	if cs.State != api.CodespaceStateAvailable {
-		return nil, fmt.Errorf("codespace is not available; start it before connecting")
-	}
+	var err error
 	if err = validateURL(cs.Connection.TunnelProperties.ServiceUri, "https"); err != nil {
 		return nil, err
 	}
