@@ -41,6 +41,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cli/cli/v2/api"
+	"github.com/cli/cli/v2/internal/codespaces/transport"
 	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/safeurl"
 	"github.com/cli/cli/v2/pkg/cmdutil"
@@ -537,6 +538,15 @@ func (a *API) GetOrgMemberCodespace(ctx context.Context, orgName string, userNam
 // If the codespace is not found, an error is returned.
 // If includeConnection is true, it will return the connection information for the codespace.
 func (a *API) GetCodespace(ctx context.Context, codespaceName string, includeConnection bool) (*Codespace, error) {
+	if includeConnection && a.externalClient != nil {
+		external, err := a.ExternalHTTPClient()
+		if err != nil {
+			return nil, err
+		}
+		if _, managed := external.Transport.(transport.Connector); managed {
+			includeConnection = false
+		}
+	}
 	resp, err := a.withRetry(func() (*http.Response, error) {
 		u, err := safeurl.JoinPathWithHostPrefix(a.githubAPI, "user", "codespaces", codespaceName)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cli/cli/v2/internal/codespaces/connection"
+	"github.com/cli/cli/v2/internal/codespaces/transport"
 	"github.com/microsoft/dev-tunnels/go/tunnels"
 )
 
@@ -29,31 +30,22 @@ const (
 	trafficTypeOutput = "output"
 )
 
-type ForwardPortOpts struct {
-	Port       int
-	Internal   bool
-	KeepAlive  bool
-	Visibility string
-}
+// ForwardPortOpts selects the remote port and forwarding behavior.
+type ForwardPortOpts = transport.ForwardPortOpts
 
 type CodespacesPortForwarder struct {
 	connection      *connection.CodespaceConnection
 	keepAliveReason chan string
 }
 
-type PortForwarder interface {
-	ForwardPortToListener(ctx context.Context, opts ForwardPortOpts, listener *net.TCPListener) error
-	ForwardPort(ctx context.Context, opts ForwardPortOpts) error
-	ConnectToForwardedPort(ctx context.Context, conn io.ReadWriteCloser, opts ForwardPortOpts) error
-	ListPorts(ctx context.Context) ([]*tunnels.TunnelPort, error)
-	UpdatePortVisibility(ctx context.Context, remotePort int, visibility string) error
-	KeepAlive(reason string)
-	GetKeepAliveReason() string
-	Close() error
-}
+// PortForwarder is the port forwarding boundary used by commands.
+type PortForwarder = transport.PortForwarder
 
 // NewPortForwarder returns a new PortForwarder for the specified codespace.
 func NewPortForwarder(ctx context.Context, codespaceConnection *connection.CodespaceConnection) (fwd PortForwarder, err error) {
+	if codespaceConnection.Managed != nil {
+		return codespaceConnection.Managed, nil
+	}
 	return &CodespacesPortForwarder{
 		connection:      codespaceConnection,
 		keepAliveReason: make(chan string, 1),
